@@ -26,6 +26,44 @@ $(whoami)/stablediffusion2
 ```
 
 
+## Fine-Tuning
+**To run fine-tuning you should run train_dreambooth_inpaint.py script via accelerate**
+
+```
+accelerate launch /train_dreambooth_inpaint.py \
+  --pretrained_model_name_or_path="runwayml/stable-diffusion-inpainting"  \
+  --instance_data_dir="path/to/dir/with/images/to/finetune" \
+  --output_dir="path/to/dir/with/inpainted/data" \
+  --instance_prompt="your custom prompt" \
+  --resolution=512 \
+  --train_batch_size=1 \
+  --gradient_accumulation_steps=1 \
+  --learning_rate=5e-6 \
+  --lr_scheduler="constant" \
+  --lr_warmup_steps=0 \
+  --max_train_steps=4000 \
+  --checkpointing_steps=3000 \
+```
+
+#
+#
+
+### Arguments explanation
+- **instance_data_dir**: directory with images for inpainting, it's always 5-20 images enough for fine-tuning.
+- **instance_prompt**: custom prompt/tags for inpainting, it should contain custom token like: sks, zhg, ggt, which model hasn't seen before. "sks" is very popular, so we advice you to use some other tokens. Your prompt can look like "zkl person hand in protective gght tthgloves".
+- **resolution**: training image resolution, your images will be resized to this size, the lower the resolution, the lower GPU memory usage.
+- **train_batch_size**: batch size for training, to increase batch size - decrease resolution.
+- **gradient_accumulation_steps**: step for gradient accumulation. For now doesn't help in training.
+- **learning_rate**: training learning rate.
+- **lr_scheduler**: training learning rate. The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial", " "constant", "constant_with_warmup"]
+- **lr_warmup_steps**: number of steps for the warmup in the lr scheduler.
+- **max_train_steps**: total number of training steps to perform.  If provided, overrides num_train_epochs. **Recommended 100-200 train steps for image. e.g. for 5 images it could be from 500 to 1000 train steps**
+- **checkpointing_steps**: save a checkpoint of the training state every X updates. We don't use them, so feel free to set it's value equal to **max_train_steps**
+
+
+
+
+
 ![t2i](assets/stable-samples/txt2img/768/merged-0006.png)
 ![t2i](assets/stable-samples/txt2img/768/merged-0002.png)
 ![t2i](assets/stable-samples/txt2img/768/merged-0005.png)
