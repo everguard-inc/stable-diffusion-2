@@ -26,3 +26,7 @@ Pillow==9.3.0
 torchtext==0.11.1
 accelerate
 opencv-python==4.5.5.64
+
+ftfy
+tensorboard
+Jinja2
