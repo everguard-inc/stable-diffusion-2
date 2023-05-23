@@ -1,4 +1,5 @@
 import os
+import shutil
 import uuid
 import random
 import argparse
@@ -12,8 +13,11 @@ from custom_inpainting.prompt_generation import PromptGenerator
 from custom_inpainting.utils import insert_image
 from torchvision.transforms.functional import crop
 from tqdm import tqdm
+from PIL import Image
+import cv2
+import numpy as np
 
-        
+
 class InpaintingPipeline:
 
     def __init__(
@@ -29,6 +33,7 @@ class InpaintingPipeline:
         self.inpainting_area_generator = inpainting_area_generator # Where to draw
         self.generation_limit = generation_limit
         self.logs_file_path = Path(logs_file_path)
+        os.makedirs(self.logs_file_path.parent, exist_ok=True)
 
         assert inpainting_area_generator.context_bbox_size % inpainter.input_stride == 0, \
             f"Specified context_bbox_size {inpainting_area_generator.context_bbox_size} is not a multiple of the model input stride {inpainter.input_stride}"

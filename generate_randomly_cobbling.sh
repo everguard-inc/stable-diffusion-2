@@ -1,0 +1,11 @@
+python custom_inpainting/generate.py \
+--input_images_dir /home/vova/tasks/2023_05_15_prepare_cobbling_detection/images \
+--result_images_dir /home/vova/tasks/2023_05_15_prepare_cobbling_detection/generated3 \
+--config_path configs/stable-diffusion/v2-inpainting-inference.yaml \
+--weights_path /media/data/vv/tasks/2023_02_14_stable_diffusion_weights/weights/512-inpainting-ema.ckpt \
+--generation_limit 100 \
+--base_prompt "Steel mill COBBLE, glowing red-hot white metal Bar flies up into the air. Cobbling" \
+--logs_file_path /media/data/vv/tasks/2022_12_05_debug_stable_diffusion2/fire.log \
+--context_bbox_size 960 \
+--number_of_areas_per_image 1 \
+--inpaint_box_size 480

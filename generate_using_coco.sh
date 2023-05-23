@@ -1,11 +1,14 @@
 python custom_inpainting/generate.py \
---input_images_dir /media/data/vv/tasks/2022_12_06_test_inpainting/samples \
---result_images_dir /media/data/vv/tasks/2022_12_05_debug_stable_diffusion2/generated/test4 \
---config_path /app/configs/stable-diffusion/v2-inpainting-inference.yaml \
---weights_path /app/weights/512-inpainting-ema.ckpt \
---generation_limit 100 \
---base_prompt head \
---logs_file_path /media/data/vv/tasks/2022_12_05_debug_stable_diffusion2/fire.log \
+--input_images_dir /media/data/vv/tasks/2023_05_11_inpainting/images \
+--result_images_dir /media/data/vv/tasks/2023_04_08_css_heads_inpainting/result/2023_05_02/inpainted7/ \
+--config_path configs/stable-diffusion/v2-inpainting-inference.yaml \
+--weights_path /media/data/vv/tasks/2023_02_14_stable_diffusion_weights/weights/512-inpainting-ema.ckpt \
+--generation_limit 100000 \
+--base_prompt "small head asian man refugee in the underground looks back, amateur photo, assembly line, Stock Footage" \
+--logs_file_path /media/data/vv/tasks/2022_12_05_debug_stable_diffusion2/head.log \
 --context_bbox_size 160 \
---coco_ann_path /media/data/vv/inference_results/Predictions_yolov5m_2022-12-06-21-38-19_dataset_heads_gunsan_yolo_3x736x736_a6fb1d1a_conf-th_0-45_2022-12-07-12-13-51/detections_coco.json \
+--coco_ann_path /media/data/vv/tasks/2023_05_11_inpainting/heads_coco.json \
 --coco_bbox_padding 20 
+
+# --base_prompt "small head asian man at the garbage dump at night in fog, amateur photo, looks back, BAD, POOR quality" \f
+# --base_prompt "small head asian man criminal theft is caught surfeillance camera footage, captive refugee in the underground, breaking news, looks back, amateur photo" \

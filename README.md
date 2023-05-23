@@ -18,7 +18,8 @@ docker run \
 --gpus all \
 --shm-size 8G \
 --hostname $(hostname) \
---mount type=bind,source="$PWD",target=/app \
+--workdir $(pwd) \
+--user $(id -u):$(id -g) \
 --mount type=bind,source="/home",target=/home \
 --mount type=bind,source="/media",target=/media \
 --privileged \

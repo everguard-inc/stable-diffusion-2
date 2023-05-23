@@ -17,7 +17,7 @@ class InpaintingArea:
         self.context_bbox = context_bbox
         self.inpaint_bbox = inpaint_bbox
 
-    def get_relative_inpaint_bbox(self) -> BBox:
+    def _get_relative_inpaint_bbox(self) -> BBox:
         return BBox(
             x1 = self.inpaint_bbox.x1 - self.context_bbox.x1,
             y1 = self.inpaint_bbox.y1 - self.context_bbox.y1,
@@ -27,7 +27,7 @@ class InpaintingArea:
 
     def get_inpainting_mask(self):
         mask = np.zeros((self.context_bbox.h, self.context_bbox.w, 1), dtype=np.uint8)
-        relative_inpaint_bbox = self.get_relative_inpaint_bbox()
+        relative_inpaint_bbox = self._get_relative_inpaint_bbox()
         mask = cv2.rectangle(
             mask, 
             (relative_inpaint_bbox.x1, relative_inpaint_bbox.y1), 
@@ -36,6 +36,17 @@ class InpaintingArea:
             -1
         )
         return Image.fromarray(np.uint8(mask[:, :, 0] * 255) , 'L')
+
+
+
+class InpaintingAreaMask:
+
+    def __init__(self, context_bbox: BBox, mask: np.ndarray) -> None:
+        self.context_bbox = context_bbox
+        self.mask = mask * 255
+
+    def get_inpainting_mask(self):
+        return Image.fromarray(np.uint8(self.mask[:, :, 0] * 255) , 'L')
 
 
 
@@ -147,5 +158,65 @@ class InpaintingAreaGeneratorRandom(InpaintingAreaGenerator):
                     )
                 )
             )
+
+        return areas
+
+
+class InpaintingAreaGeneratorMasks(InpaintingAreaGenerator):
+    
+
+    def __init__(self, context_bbox_size: int, masks_dir_path: str) -> None:
+        super().__init__(context_bbox_size)
+
+        # receive masks_dir and create dict where key is image base_name and value is mask_path
+        self.mask_path_dict = dict()
+        for mask_name in os.listdir(masks_dir_path):
+            mask_path = os.path.join(masks_dir_path, mask_name)
+            self.mask_path_dict[os.path.splitext(os.path.basename(mask_path))[0]] = mask_path
+
+
+
+
+    def get_inpainting_areas(self, img_path: Path) -> List[InpaintingArea]:
+        mask_path = self.mask_path_dict[img_path.stem] 
+
+        image = Image.open(img_path)
+        context_bbox_size = min([self.context_bbox_size, image.height, image.width])
+        areas = list()
+
+        mask = cv2.imread(mask_path)
+
+        gray = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        cnts = cv2.findContours(gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+        
+        if len(cnts) == 0:
+            return list()
+        
+        x,y,w,h = cv2.boundingRect(cnts[0])
+
+        bbox_center_x = int(x + w / 2)
+        bbox_center_y = int(y + h / 2)
+
+        context_bbox_center_x = min([int(image.width - context_bbox_size / 2), bbox_center_x])
+        context_bbox_center_y = min([int(image.height - context_bbox_size / 2), bbox_center_y])
+
+
+        context_bbox_x1 = max([0, int(context_bbox_center_x - context_bbox_size / 2)])
+        context_bbox_y1 = max([0, int(context_bbox_center_y - context_bbox_size / 2)])
+        context_bbox_x2 = context_bbox_x1 + context_bbox_size
+        context_bbox_y2 = context_bbox_y1 + context_bbox_size
+
+        cropped_mask = mask[context_bbox_y1:context_bbox_y2, context_bbox_x1:context_bbox_x2] * 255
+
+        areas.append(InpaintingAreaMask(
+            context_bbox=BBox(
+                x1=context_bbox_x1,
+                y1=context_bbox_y1,
+                x2=context_bbox_x2,
+                y2=context_bbox_y2
+            ),
+            mask=cropped_mask
+        ))
 
         return areas
