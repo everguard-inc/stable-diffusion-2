@@ -10,6 +10,8 @@ wget https://huggingface.co/stabilityai/stable-diffusion-2-inpainting/resolve/ma
 
 ## Build and run Container
 
+(NOTE: requirements in container have changed - rebuild container)
+
 ```
 docker build -t $(whoami)/stablediffusion2 .
 
@@ -30,9 +32,12 @@ $(whoami)/stablediffusion2
 **To run fine-tuning you should run train_dreambooth_inpaint.py script via accelerate**
 
 ```
-accelerate launch /train_dreambooth_inpaint.py \
+accelerate launch  \
+  --config_file default_config.yaml \
+  train_dreambooth_inpaint.py \
   --pretrained_model_name_or_path="runwayml/stable-diffusion-inpainting"  \
   --instance_data_dir="path/to/dir/with/images/to/finetune" \
+  --coco_annotation_file="path/to/coco/file/" \
   --output_dir="path/to/dir/with/inpainted/data" \
   --instance_prompt="your custom prompt" \
   --resolution=512 \
@@ -45,12 +50,33 @@ accelerate launch /train_dreambooth_inpaint.py \
   --checkpointing_steps=3000 \
 ```
 
+### Resolution
+Resulution argument shoul be devided by 64.
+For tuning it should be changed for different types of images.
+- If you have little instances in your fine-tuning dataset (like people), you can use 256 resolution.
+- For bigger objects (like trucks, machines) is better to use 512 resolution.
+
+### Prompt
+Prompt should contain unique key like "sks" or "zlk", anything that model hasn't seen before.
+
+### Max Train Stems
+This argument should be set depends on number of instances for train. It's always enourg to make 200-300 iterations per image. So if you have 20 images, number of itarations should be 4000-6000.
+
+### Instances Number
+Number of instances should be between 20 and 50. More will bw not good.
+
+
+For inference tuned models just set path to models dir (*output_dir*) to our inference script.
+
+
+
 #
 #
 
 ### Arguments explanation
 - **instance_data_dir**: directory with images for inpainting, it's always 5-20 images enough for fine-tuning.
 - **instance_prompt**: custom prompt/tags for inpainting, it should contain custom token like: sks, zhg, ggt, which model hasn't seen before. "sks" is very popular, so we advice you to use some other tokens. Your prompt can look like "zkl person hand in protective gght tthgloves".
+- **coco_annotation_file**: path to coco annotation file
 - **resolution**: training image resolution, your images will be resized to this size, the lower the resolution, the lower GPU memory usage.
 - **train_batch_size**: batch size for training, to increase batch size - decrease resolution.
 - **gradient_accumulation_steps**: step for gradient accumulation. For now doesn't help in training.
@@ -62,7 +88,8 @@ accelerate launch /train_dreambooth_inpaint.py \
 
 
 
-
+#
+#
 
 ![t2i](assets/stable-samples/txt2img/768/merged-0006.png)
 ![t2i](assets/stable-samples/txt2img/768/merged-0002.png)

@@ -1,7 +1,3 @@
-"""
-    This script is taken from the diffusers library and adapted to train the Dreambooth model.
-"""
-
 import argparse
 import hashlib
 import itertools
@@ -15,11 +11,21 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch.utils.data import Dataset
-
 from accelerate import Accelerator
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
+from accelerate.utils import ProjectConfiguration, set_seed
+from huggingface_hub import HfFolder, Repository, create_repo, whoami
+from PIL import Image, ImageDraw
+from torch.utils.data import Dataset
+from torchvision import transforms
+from tqdm.auto import tqdm
+from transformers import CLIPTextModel, CLIPTokenizer
+from torchvision.datasets.coco import CocoDetection
+
+from eg_data_tools.annotation_processing.coco_utils.coco_read_write import open_coco
+
+from torchvision.transforms.functional import to_pil_image
+
 from diffusers import (
     AutoencoderKL,
     DDPMScheduler,
@@ -28,14 +34,11 @@ from diffusers import (
     UNet2DConditionModel,
 )
 from diffusers.optimization import get_scheduler
-from huggingface_hub import HfFolder, Repository, create_repo, whoami
-from PIL import Image, ImageDraw
-from torchvision import transforms
-from tqdm.auto import tqdm
-from transformers import CLIPTextModel, CLIPTokenizer
+# from diffusers.utils import check_min_version
 
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
+# check_min_version("0.13.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -103,6 +106,12 @@ def parse_args():
         default=None,
         required=True,
         help="A folder containing the training data of instance images.",
+    )
+    parser.add_argument(
+        "--coco_annotation_file",
+        type=str,
+        default=None,
+        help="The path to the coco annotation file.",
     )
     parser.add_argument(
         "--class_data_dir",
@@ -261,6 +270,16 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--checkpoints_total_limit",
+        type=int,
+        default=None,
+        help=(
+            "Max number of checkpoints to store. Passed as `total_limit` to the `Accelerator` `ProjectConfiguration`."
+            " See Accelerator::save_state https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator.save_state"
+            " for more docs"
+        ),
+    )
+    parser.add_argument(
         "--resume_from_checkpoint",
         type=str,
         default=None,
@@ -376,6 +395,97 @@ class DreamBoothDataset(Dataset):
 
         return example
 
+class DreamboothCOCODataset(Dataset):
+    def __init__(
+        self,
+        instance_data_root: str,
+        coco_ann_path: str,
+        instance_prompt: str,
+        tokenizer: CLIPTokenizer,
+        size: int = 512,
+        center_crop: bool = False
+    ):
+        self.size = size
+        self.center_crop = center_crop
+        self.tokenizer = tokenizer
+
+        self.instance_data_root = Path(instance_data_root)
+        if not self.instance_data_root.exists():
+            raise ValueError("Instance images root doesn't exists.")
+        self.ann = open_coco(coco_ann_path)
+        
+
+        self.instance_images_path = list(Path(instance_data_root).iterdir())
+        self.num_instance_images = len(self.instance_images_path)
+        self.instance_prompt = instance_prompt
+        self._create_batches()
+        
+        self._length = len(self.targets_crops)
+
+        
+        self.image_transforms_resize_and_crop = transforms.Compose(
+            [
+                transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
+                transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
+            ]
+        )
+        
+        self.image_transforms = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5]),
+            ]
+        )
+        
+    def __len__(self):
+        return self._length
+
+    def _create_batches(self):
+        self.targets_crops = []
+        
+        for limage in self.ann:
+            
+            image = Image.open(self.instance_data_root / limage.name)
+            if not image.mode == "RGB":
+                image = image.convert("RGB")
+            
+            width, height = image.size
+            for bbox in limage.bbox_list:
+                
+                if bbox.w != bbox.h:
+                    square_size = max(bbox.w, bbox.h)
+                    crop_left = max(0, bbox.x1 + bbox.w // 2 - square_size // 2)
+                    crop_top = max(0, bbox.y1 + bbox.h // 2 - square_size // 2)
+                    crop_right = min(width, crop_left + square_size)
+                    crop_bottom = min(height, crop_top + square_size)
+                else:
+                    crop_left = bbox.x1
+                    crop_top = bbox.y1
+                    crop_right = bbox.x2
+                    crop_bottom = bbox.y2
+                
+                self.targets_crops.append(image.crop((crop_left, crop_top, crop_right, crop_bottom)))
+    
+    def __getitem__(self, index):
+        example = {}
+        
+        instance_image = self.targets_crops[index]
+        instance_image = self.image_transforms_resize_and_crop(instance_image)
+        
+        example["PIL_images"] = instance_image
+        example["instance_images"] = self.image_transforms(instance_image)
+        
+        example["instance_prompt_ids"] = self.tokenizer(
+            self.instance_prompt,
+            padding="do_not_pad",
+            truncation=True,
+            max_length=self.tokenizer.model_max_length,
+        ).input_ids
+        
+        return example
+                
+
+
 
 class PromptDataset(Dataset):
     "A simple dataset to prepare the prompts to generate class images on multiple GPUs."
@@ -408,11 +518,14 @@ def main():
     args = parse_args()
     logging_dir = Path(args.output_dir, args.logging_dir)
 
+    # accelerator_project_config = ProjectConfiguration(total_limit=args.checkpoints_total_limit)
+
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         log_with="tensorboard",
         logging_dir=logging_dir,
+        # accelerator_project_config=accelerator_project_config,
     )
 
     # Currently, it's not possible to do gradient accumulation when training two models with accelerate.accumulate
@@ -539,17 +652,29 @@ def main():
         eps=args.adam_epsilon,
     )
 
-    noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler", force_download=True)
 
-    train_dataset = DreamBoothDataset(
-        instance_data_root=args.instance_data_dir,
+    
+    
+    # if args.coco_annotation_file:
+    train_dataset = DreamboothCOCODataset(
+        instance_data_root="/home/vova/auv/finetune_data/data/images",
+        coco_ann_path="/home/vova/auv/finetune_data/data/25_images.json",
         instance_prompt=args.instance_prompt,
-        class_data_root=args.class_data_dir if args.with_prior_preservation else None,
-        class_prompt=args.class_prompt,
         tokenizer=tokenizer,
-        size=args.resolution,
+        size = args.resolution,
         center_crop=args.center_crop,
     )
+    # else:
+    #     train_dataset = DreamBoothDataset(
+    #         instance_data_root=args.instance_data_dir,
+    #         instance_prompt=args.instance_prompt,
+    #         class_data_root=args.class_data_dir if args.with_prior_preservation else None,
+    #         class_prompt=args.class_prompt,
+    #         tokenizer=tokenizer,
+    #         size=args.resolution,
+    #         center_crop=args.center_crop,
+    #     )
 
     def collate_fn(examples):
         input_ids = [example["instance_prompt_ids"] for example in examples]
@@ -592,6 +717,8 @@ def main():
         masked_images = torch.stack(masked_images)
         batch = {"input_ids": input_ids, "pixel_values": pixel_values, "masks": masks, "masked_images": masked_images}
         return batch
+
+
 
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=collate_fn
@@ -691,6 +818,10 @@ def main():
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
         for step, batch in enumerate(train_dataloader):
+            
+            img_to_save = to_pil_image(batch['pixel_values'][0].detach().cpu())
+            img_to_save.save(f"/home/vova/auv/stable-diffusion-2/test/{step}.png")
+            
             # Skip steps until we reach the resumed step
             if args.resume_from_checkpoint and epoch == first_epoch and step < resume_step:
                 if step % args.gradient_accumulation_steps == 0:
@@ -702,15 +833,14 @@ def main():
 
                 latents = vae.encode(batch["pixel_values"].to(dtype=weight_dtype)).latent_dist.sample()
                 # latents = latents * vae.config.scaling_factor
-                latents = latents * 0.18215 # hardcoded due to bug in vae config
-
+                latents = latents * 0.18215
 
                 # Convert masked images to latent space
                 masked_latents = vae.encode(
                     batch["masked_images"].reshape(batch["pixel_values"].shape).to(dtype=weight_dtype)
                 ).latent_dist.sample()
                 # masked_latents = masked_latents * vae.config.scaling_factor
-                masked_latents = masked_latents * 0.18215 # hardcoded due to bug in vae config
+                masked_latents = masked_latents * 0.18215
 
                 masks = batch["masks"]
                 # resize the mask to latents shape as we concatenate the mask to the latents
