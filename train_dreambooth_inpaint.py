@@ -656,25 +656,25 @@ def main():
 
     
     
-    # if args.coco_annotation_file:
-    train_dataset = DreamboothCOCODataset(
-        instance_data_root="/home/vova/auv/finetune_data/data/images",
-        coco_ann_path="/home/vova/auv/finetune_data/data/25_images.json",
-        instance_prompt=args.instance_prompt,
-        tokenizer=tokenizer,
-        size = args.resolution,
-        center_crop=args.center_crop,
-    )
-    # else:
-    #     train_dataset = DreamBoothDataset(
-    #         instance_data_root=args.instance_data_dir,
-    #         instance_prompt=args.instance_prompt,
-    #         class_data_root=args.class_data_dir if args.with_prior_preservation else None,
-    #         class_prompt=args.class_prompt,
-    #         tokenizer=tokenizer,
-    #         size=args.resolution,
-    #         center_crop=args.center_crop,
-    #     )
+    if args.coco_annotation_file:
+        train_dataset = DreamboothCOCODataset(
+            instance_data_root=args.instance_data_dir,
+            coco_ann_path=args.coco_annotation_file,
+            instance_prompt=args.instance_prompt,
+            tokenizer=tokenizer,
+            size = args.resolution,
+            center_crop=args.center_crop,
+        )
+    else:
+        train_dataset = DreamBoothDataset(
+            instance_data_root=args.instance_data_dir,
+            instance_prompt=args.instance_prompt,
+            class_data_root=args.class_data_dir if args.with_prior_preservation else None,
+            class_prompt=args.class_prompt,
+            tokenizer=tokenizer,
+            size=args.resolution,
+            center_crop=args.center_crop,
+        )
 
     def collate_fn(examples):
         input_ids = [example["instance_prompt_ids"] for example in examples]
@@ -818,9 +818,6 @@ def main():
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
         for step, batch in enumerate(train_dataloader):
-            
-            img_to_save = to_pil_image(batch['pixel_values'][0].detach().cpu())
-            img_to_save.save(f"/home/vova/auv/stable-diffusion-2/test/{step}.png")
             
             # Skip steps until we reach the resumed step
             if args.resume_from_checkpoint and epoch == first_epoch and step < resume_step:
