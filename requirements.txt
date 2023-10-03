@@ -14,7 +14,7 @@ test-tube>=0.7.5
 streamlit>=0.73.1
 einops==0.3.0
 omegaconf==2.1.1
-transformers==4.19.2
+transformers
 webdataset==0.2.5
 gradio==3.11
 kornia==0.6

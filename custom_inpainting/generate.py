@@ -154,10 +154,7 @@ def main(
     inpaint_box_size: int = None, 
     number_of_areas_per_image: int = 1,
 
-    config_path: Optional[str] = None,
-    weights_path: Optional[str] = None,
-    half_model: bool = False,
-    num_inference_steps: int = 60,
+    num_inference_steps: int = 30,
     tags_txt_path: str = None, 
     number_of_tags_per_prompt: int = 1
 ):
@@ -179,9 +176,6 @@ def main(
 
     pipeline = InpaintingPipeline(
         inpainter=Inpainter(
-            config_path=config_path,
-            weights_path=weights_path,
-            half_model=half_model,
             num_inference_steps=num_inference_steps,
         ),
         prompt_generator=PromptGenerator(
@@ -204,8 +198,6 @@ def parse_args() -> argparse.Namespace:
     args = argparse.ArgumentParser()
     args.add_argument('--input_images_dir', type=str, required=True)
     args.add_argument('--result_images_dir', type=str, required=True)
-    args.add_argument('--config_path', type=str, required=True)
-    args.add_argument('--weights_path', type=str, required=True)
     args.add_argument('--generation_limit', type=int, default=100)
     args.add_argument('--logs_file_path', type=str, required=True)
     args.add_argument('--context_bbox_size', type=int, required=True)
@@ -220,7 +212,6 @@ def parse_args() -> argparse.Namespace:
     args.add_argument('--number_of_areas_per_image', type=int, default=1, help="Only for generation in random place on image")
     args.add_argument('--inpaint_box_size', type=int, help="Only for generation in random place on image")
 
-    args.add_argument('--half_model', action='store_true')
     args.add_argument('--num_inference_steps', type=int, default=60)
 
     return args.parse_args()
@@ -231,8 +222,6 @@ if __name__ == "__main__":
     main(
         input_images_dir=args.input_images_dir,
         result_images_dir=args.result_images_dir,
-        config_path=args.config_path,
-        weights_path=args.weights_path,
         generation_limit=args.generation_limit,
         logs_file_path=args.logs_file_path,
         context_bbox_size=args.context_bbox_size,
@@ -247,6 +236,5 @@ if __name__ == "__main__":
         number_of_areas_per_image=args.number_of_areas_per_image,
         inpaint_box_size=args.inpaint_box_size,
 
-        half_model=args.half_model,
         num_inference_steps=args.num_inference_steps,
     )
