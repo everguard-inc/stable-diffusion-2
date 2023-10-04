@@ -1,4 +1,4 @@
-python custom_inpainting/generate.py \
+python generate.py \
 --input_images_dir /media/data/vv/tasks/2023_07_30_new_seah_for_inpainting/img_with_bbox \
 --result_images_dir /media/data/vv/tasks/2023_07_30_heads_inpainting/result/2023_08_09/inpainted_sdxl_for_filtering/ \
 --generation_limit 100000 \
